@@ -1,0 +1,2 @@
+# DumbMoney
+Quantitative Trading Test
