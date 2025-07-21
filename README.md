@@ -1,2 +1,20 @@
-# DumbMoney
-Quantitative Trading Test
+A modular, extensible quantitative backtesting framework for price-action strategies  
+Supports Bull→Bear and Bear→Bull transitions, pattern debugging, backtesting, and reporting.
+
+## Installation
+### Create and activate a virtual environment (recommended)
+```
+python3.10 -m venv venv
+source venv/bin/activate      # macOS/Linux
+venv\Scripts\activate         # Windows
+```
+## Install dependencies
+```
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+## Usage
+```
+python examples/example.py
+```
