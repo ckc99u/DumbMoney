@@ -1,485 +1,436 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import plotly.graph_objects as go
 from scipy.signal import argrelextrema
 from datetime import datetime, timedelta
+import yfinance as yf
 import warnings
 warnings.filterwarnings('ignore')
-def get_nq_data(days=60):
-    """
-    Get NQ futures data. Since NQ1 15k isn't directly available from free sources,
-    we'll use NQ=F (continuous futures) as a proxy
-    """
-    try:
-        import yfinance as yf
-        # Download NQ futures data (15-minute intervals)
-        ticker = "NQ=F"  # Nasdaq 100 E-mini futures
-        data = yf.download(ticker, period=f"{days}d", interval="15m")
-        data.dropna(inplace=True)
-        return data
-    except ImportError:
-        # Generate sample data if yfinance is not available
-        print("yfinance not available, generating sample NQ-like data...")
-        return generate_sample_data()
 
-def generate_sample_data(num_bars=2000):
-    """Generate sample OHLC data that resembles NQ futures for testing"""
-    np.random.seed(42)
-    dates = pd.date_range(start='2024-01-01', periods=num_bars, freq='15min')
-    
-    # Start price around typical NQ levels
-    base_price = 15000
-    prices = [base_price]
-    
-    # Generate realistic price movements
-    for i in range(num_bars - 1):
-        change = np.random.normal(0, 20)  # 20-point average moves
-        new_price = prices[-1] + change
-        prices.append(max(new_price, 10000))  # Floor price
-    
-    # Create OHLC data
-    data = []
-    for i, price in enumerate(prices):
-        high_offset = abs(np.random.normal(0, 15))
-        low_offset = abs(np.random.normal(0, 15))
-        close_change = np.random.normal(0, 10)
-        
-        open_price = price
-        high_price = price + high_offset
-        low_price = price - low_offset
-        close_price = price + close_change
-        
-        data.append([open_price, high_price, low_price, close_price, 
-                    np.random.randint(1000, 5000)])  # Volume
-    
-    df = pd.DataFrame(data, columns=['Open', 'High', 'Low', 'Close', 'Volume'])
-    df.index = dates
-    return df
-
-def plot_patterns_with_candlesticks(data, patterns):
-    """Create an interactive candlestick chart with pattern annotations"""
-    
-    # Create candlestick chart
-    fig = go.Figure(data=[go.Candlestick(
-        x=data.index,
-        open=data['Open'],
-        high=data['High'],
-        low=data['Low'],
-        close=data['Close'],
-        name='NQ 15min',
-        increasing_line_color='green',
-        decreasing_line_color='red'
-    )])
-    
-    # Add pattern annotations
-    for pattern in patterns:
-        if pattern['pattern_type'] == 'Double Top':
-            # Mark the double top pattern
-            first_idx = pattern['first_peak']
-            trough_idx = pattern['trough']
-            second_idx = pattern['second_peak']
-            
-            # Add markers for peaks
-            fig.add_trace(go.Scatter(
-                x=[data.index[first_idx], data.index[second_idx]],
-                y=[data['High'].iloc[first_idx], data['High'].iloc[second_idx]],
-                mode='markers',
-                marker=dict(color='red', size=12, symbol='triangle-down'),
-                name='Double Top',
-                showlegend=True
-            ))
-            
-            # Add connecting line
-            fig.add_trace(go.Scatter(
-                x=[data.index[first_idx], data.index[trough_idx], data.index[second_idx]],
-                y=[data['High'].iloc[first_idx], data['Low'].iloc[trough_idx], 
-                   data['High'].iloc[second_idx]],
-                mode='lines',
-                line=dict(color='red', width=2, dash='dash'),
-                name='Double Top Pattern',
-                showlegend=False
-            ))
-            
-            # Add SELL annotation
-            fig.add_annotation(
-                x=data.index[second_idx],
-                y=data['High'].iloc[second_idx],
-                text="SELL",
-                showarrow=True,
-                arrowhead=2,
-                arrowcolor="red",
-                font=dict(color="red", size=12, family="Arial Black")
-            )
-        
-        elif pattern['pattern_type'] == 'Double Bottom':
-            # Mark the double bottom pattern
-            first_idx = pattern['first_trough']
-            peak_idx = pattern['peak']
-            second_idx = pattern['second_trough']
-            
-            # Add markers for troughs
-            fig.add_trace(go.Scatter(
-                x=[data.index[first_idx], data.index[second_idx]],
-                y=[data['Low'].iloc[first_idx], data['Low'].iloc[second_idx]],
-                mode='markers',
-                marker=dict(color='green', size=12, symbol='triangle-up'),
-                name='Double Bottom',
-                showlegend=True
-            ))
-            
-            # Add connecting line
-            fig.add_trace(go.Scatter(
-                x=[data.index[first_idx], data.index[peak_idx], data.index[second_idx]],
-                y=[data['Low'].iloc[first_idx], data['High'].iloc[peak_idx], 
-                   data['Low'].iloc[second_idx]],
-                mode='lines',
-                line=dict(color='green', width=2, dash='dash'),
-                name='Double Bottom Pattern',
-                showlegend=False
-            ))
-            
-            # Add BUY annotation
-            fig.add_annotation(
-                x=data.index[second_idx],
-                y=data['Low'].iloc[second_idx],
-                text="BUY",
-                showarrow=True,
-                arrowhead=2,
-                arrowcolor="green",
-                font=dict(color="green", size=12, family="Arial Black")
-            )
-    
-    # Update layout
-    fig.update_layout(
-        title='NQ Futures 15-Minute Chart - Double Top/Bottom Pattern Detection',
-        xaxis_title='Time',
-        yaxis_title='Price',
-        xaxis_rangeslider_visible=False,
-        height=800,
-        showlegend=True
-    )
-    
-    return fig
-
-
-class DoublePatternDetector:
-    def __init__(self, price_tolerance=0.008, min_separation=10, lookback_window=5):
+class ProfessionalSupportResistanceDetector:
+    def __init__(self, min_touches=4, max_break_percentage=0.015, 
+                 return_threshold=0.02, min_coverage=0.75, max_lines_per_type=3,
+                 price_tolerance=0.005, time_overlap_threshold=0.7):
         """
-        Initialize the Double Top/Bottom Pattern Detector
+        Professional-grade S/R detector with overlap elimination
         
         Parameters:
-        price_tolerance: Maximum price difference between peaks/troughs (as percentage)
-        min_separation: Minimum bars between pattern points
-        lookback_window: Window size for finding local extrema
+        - max_lines_per_type: Maximum number of S/R lines to return
+        - price_tolerance: Price similarity threshold for consolidation (0.5%)
+        - time_overlap_threshold: Time overlap threshold for consolidation (70%)
         """
+        self.min_touches = min_touches
+        self.max_break_percentage = max_break_percentage
+        self.return_threshold = return_threshold
+        self.min_coverage = min_coverage
+        self.max_lines_per_type = max_lines_per_type
         self.price_tolerance = price_tolerance
-        self.min_separation = min_separation
-        self.lookback_window = lookback_window
+        self.time_overlap_threshold = time_overlap_threshold
     
-    def find_local_extrema(self, data, column):
-        """Find local maxima and minima in the data"""
-        if column == 'High':
-            local_extrema = argrelextrema(data[column].values, np.greater_equal, 
-                                        order=self.lookback_window)[0]
-        else:  # Low
-            local_extrema = argrelextrema(data[column].values, np.less_equal, 
-                                        order=self.lookback_window)[0]
-        return local_extrema
+    def find_pivot_points(self, data, window=5):
+        """Find local highs and lows using scipy"""
+        highs = argrelextrema(data['High'].values, np.greater, order=window)[0]
+        lows = argrelextrema(data['Low'].values, np.less, order=window)[0]
+        
+        pivot_highs = [(i, data['High'].iloc[i]) for i in highs]
+        pivot_lows = [(i, data['Low'].iloc[i]) for i in lows]
+        
+        return pivot_highs, pivot_lows
     
-    def detect_double_top(self, data):
-        """
-        Detect double top patterns (Sell signals)
-        Pattern: High-Low-High where both highs are approximately equal
-        """
-        highs_idx = self.find_local_extrema(data, 'High')
-        lows_idx = self.find_local_extrema(data, 'Low')
+    def calculate_line_strength(self, data, line_slope, line_intercept, is_support=True):
+        """Calculate how well a line fits the price action"""
+        touches = 0
+        total_candles = len(data)
+        covered_candles = 0
+        touch_points = []
         
-        double_tops = []
+        for idx, (_, row) in enumerate(data.iterrows()):
+            line_price = line_slope * idx + line_intercept
+            
+            if is_support:
+                distance = abs(row['Low'] - line_price)
+                if distance <= (line_price * 0.005):
+                    touches += 1
+                    touch_points.append((idx, row['Low'], line_price))
+                if row['Low'] >= line_price * 0.98:
+                    covered_candles += 1
+            else:
+                distance = abs(row['High'] - line_price)
+                if distance <= (line_price * 0.005):
+                    touches += 1
+                    touch_points.append((idx, row['High'], line_price))
+                if row['High'] <= line_price * 1.02:
+                    covered_candles += 1
         
-        for i in range(len(highs_idx) - 1):
-            first_high_idx = int(highs_idx[i])  # Ensure integer indexing
-            second_high_idx = int(highs_idx[i + 1])  # Ensure integer indexing
+        coverage_ratio = covered_candles / total_candles
+        return touches, coverage_ratio, touch_points
+    
+    def calculate_time_overlap(self, line1, line2):
+        """Calculate temporal overlap between two lines"""
+        start1, end1 = line1['start_idx'], line1['end_idx']
+        start2, end2 = line2['start_idx'], line2['end_idx']
+        
+        # Calculate overlap
+        overlap_start = max(start1, start2)
+        overlap_end = min(end1, end2)
+        
+        if overlap_start >= overlap_end:
+            return 0.0  # No overlap
+        
+        overlap_length = overlap_end - overlap_start
+        total_length = max(end1 - start1, end2 - start2)
+        
+        return overlap_length / total_length if total_length > 0 else 0.0
+    
+    def consolidate_overlapping_lines(self, lines):
+        """Consolidate lines that are too similar in price and time"""
+        if not lines:
+            return []
+        
+        consolidated = []
+        
+        for line in lines:
+            should_merge = False
             
-            # Check minimum separation
-            if second_high_idx - first_high_idx < self.min_separation:
-                continue
-            
-            # Use .iloc with integer indices and convert to scalar with .item()
-            first_high_price = data['High'].iloc[first_high_idx]
-            second_high_price = data['High'].iloc[second_high_idx]
-            
-            # Ensure these are scalar values
-            if hasattr(first_high_price, 'item'):
-                first_high_price = first_high_price.item()
-            if hasattr(second_high_price, 'item'):
-                second_high_price = second_high_price.item()
-            
-            # Calculate price difference and average (now guaranteed scalars)
-            price_diff = abs(first_high_price - second_high_price)
-            avg_price = (first_high_price + second_high_price) / 2
-            
-            # Safe boolean comparison with scalar values
-            if price_diff / avg_price <= self.price_tolerance:
-                # Find the low between the two highs
-                intermediate_lows = [int(idx) for idx in lows_idx 
-                                   if first_high_idx < idx < second_high_idx]
+            for i, existing in enumerate(consolidated):
+                # Check price similarity
+                price_diff = abs(line['start_price'] - existing['start_price']) / existing['start_price']
                 
-                if intermediate_lows:
-                    low_idx = min(intermediate_lows, 
-                                key=lambda x: data['Low'].iloc[x])
-                    low_price = data['Low'].iloc[low_idx]
-                    
-                    # Ensure scalar value
-                    if hasattr(low_price, 'item'):
-                        low_price = low_price.item()
-                    
-                    # Ensure the intermediate low is significantly lower
-                    if (first_high_price - low_price) / first_high_price > 0.01:
-                        double_tops.append({
-                            'pattern_type': 'Double Top',
-                            'first_peak': first_high_idx,
-                            'trough': low_idx,
-                            'second_peak': second_high_idx,
-                            'signal': 'SELL',
-                            'confirmation_idx': second_high_idx,
-                            'price_level': avg_price
-                        })
-        
-        return double_tops
-    
-    def detect_double_bottom(self, data):
-        """
-        Detect double bottom patterns (Buy signals)
-        Pattern: Low-High-Low where both lows are approximately equal
-        """
-        highs_idx = self.find_local_extrema(data, 'High')
-        lows_idx = self.find_local_extrema(data, 'Low')
-        
-        double_bottoms = []
-        
-        for i in range(len(lows_idx) - 1):
-            first_low_idx = int(lows_idx[i])  # Ensure integer indexing
-            second_low_idx = int(lows_idx[i + 1])  # Ensure integer indexing
-            
-            # Check minimum separation
-            if second_low_idx - first_low_idx < self.min_separation:
-                continue
-            
-            # Use .iloc with integer indices and convert to scalar
-            first_low_price = data['Low'].iloc[first_low_idx]
-            second_low_price = data['Low'].iloc[second_low_idx]
-            
-            # Ensure these are scalar values
-            if hasattr(first_low_price, 'item'):
-                first_low_price = first_low_price.item()
-            if hasattr(second_low_price, 'item'):
-                second_low_price = second_low_price.item()
-            
-            # Calculate price difference and average (now guaranteed scalars)
-            price_diff = abs(first_low_price - second_low_price)
-            avg_price = (first_low_price + second_low_price) / 2
-            
-            # Safe boolean comparison with scalar values
-            if price_diff / avg_price <= self.price_tolerance:
-                # Find the high between the two lows
-                intermediate_highs = [int(idx) for idx in highs_idx 
-                                    if first_low_idx < idx < second_low_idx]
+                # Check time overlap
+                time_overlap = self.calculate_time_overlap(line, existing)
                 
-                if intermediate_highs:
-                    high_idx = max(intermediate_highs, 
-                                 key=lambda x: data['High'].iloc[x])
-                    high_price = data['High'].iloc[high_idx]
-                    
-                    # Ensure scalar value
-                    if hasattr(high_price, 'item'):
-                        high_price = high_price.item()
-                    
-                    # Ensure the intermediate high is significantly higher
-                    if (high_price - first_low_price) / first_low_price > 0.01:
-                        double_bottoms.append({
-                            'pattern_type': 'Double Bottom',
-                            'first_trough': first_low_idx,
-                            'peak': high_idx,
-                            'second_trough': second_low_idx,
-                            'signal': 'BUY',
-                            'confirmation_idx': second_low_idx,
-                            'price_level': avg_price
-                        })
+                if price_diff < self.price_tolerance and time_overlap > self.time_overlap_threshold:
+                    # Merge with stronger line (more touches)
+                    if line['touches'] > existing['touches']:
+                        consolidated[i] = line  # Replace with stronger line
+                    should_merge = True
+                    break
+            
+            if not should_merge:
+                consolidated.append(line)
         
-        return double_bottoms
+        return consolidated
     
-    def detect_patterns(self, data):
-        """Detect both double top and double bottom patterns"""
-        double_tops = self.detect_double_top(data)
-        double_bottoms = self.detect_double_bottom(data)
-        return double_tops + double_bottoms
-
-# Alternative robust approach using numpy operations
-class RobustDoublePatternDetector:
-    def __init__(self, price_tolerance=0.008, min_separation=10, lookback_window=5):
-        self.price_tolerance = price_tolerance
-        self.min_separation = min_separation
-        self.lookback_window = lookback_window
+    def rank_line_strength(self, line, current_price=None):
+        """Calculate composite strength score for line ranking"""
+        base_score = (
+            line['touches'] * 2.0 +                    # Touch weight
+            line['coverage'] * 1.5 +                   # Coverage weight  
+            (1.0 / (abs(line['slope']) + 0.001)) * 0.5 # Prefer horizontal lines
+        )
+        
+        # Add recency bonus if we have current price context
+        if current_price:
+            price_relevance = 1.0 - min(
+                abs(current_price - line['start_price']) / current_price,
+                abs(current_price - line['end_price']) / current_price
+            )
+            base_score *= (1.0 + price_relevance * 0.3)
+        
+        return base_score
     
-    def find_local_extrema(self, data, column):
-        """Find local maxima and minima using numpy arrays directly"""
-        values = data[column].values  # Convert to numpy array
-        if column == 'High':
-            extrema_idx = argrelextrema(values, np.greater_equal, 
-                                      order=self.lookback_window)[0]
+    def check_significant_overlap(self, line1, line2):
+        """Check if two lines have significant overlap"""
+        price_diff = abs(line1['start_price'] - line2['start_price']) / line2['start_price']
+        time_overlap = self.calculate_time_overlap(line1, line2)
+        
+        return price_diff < self.price_tolerance * 2 or time_overlap > 0.3
+    
+    def select_best_lines(self, lines, current_price=None):
+        """Select top N strongest non-overlapping lines"""
+        if not lines:
+            return []
+        
+        # Sort by strength
+        sorted_lines = sorted(
+            lines, 
+            key=lambda x: self.rank_line_strength(x, current_price), 
+            reverse=True
+        )
+        
+        selected = []
+        
+        for line in sorted_lines:
+            if len(selected) >= self.max_lines_per_type:
+                break
+                
+            # Check if this line overlaps significantly with already selected
+            overlaps = any(
+                self.check_significant_overlap(line, sel) 
+                for sel in selected
+            )
+            
+            if not overlaps:
+                selected.append(line)
+        
+        return selected
+    
+    def get_datetime_format(self, interval):
+        """Determine datetime format based on interval"""
+        intraday_intervals = ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h']
+        
+        if interval in intraday_intervals:
+            return '%Y-%m-%d %H:%M'
         else:
-            extrema_idx = argrelextrema(values, np.less_equal, 
-                                      order=self.lookback_window)[0]
-        return extrema_idx
+            return '%Y-%m-%d'
     
-    def detect_double_top(self, data):
-        """Robust double top detection using numpy operations"""
-        highs_idx = self.find_local_extrema(data, 'High')
-        lows_idx = self.find_local_extrema(data, 'Low')
+    def find_support_resistance_lines(self, data, interval='1d'):
+        """Find potential support and resistance lines with professional filtering"""
+        pivot_highs, pivot_lows = self.find_pivot_points(data)
+        datetime_format = self.get_datetime_format(interval)
+        current_price = data['Close'].iloc[-1]
         
-        # Convert to numpy arrays for robust indexing
-        high_values = data['High'].values
-        low_values = data['Low'].values
+        # Raw line detection
+        raw_support_lines = []
+        raw_resistance_lines = []
         
-        double_tops = []
-        
-        for i in range(len(highs_idx) - 1):
-            first_high_idx = highs_idx[i]
-            second_high_idx = highs_idx[i + 1]
+        # Find support lines with strategic pair selection
+        if len(pivot_lows) >= 2:
+            # Limit pairs to reduce computational complexity
+            max_pairs = min(50, len(pivot_lows) * (len(pivot_lows) - 1) // 2)
+            pair_count = 0
             
-            if second_high_idx - first_high_idx < self.min_separation:
-                continue
-            
-            # Direct numpy array access ensures scalar values
-            first_high_price = high_values[first_high_idx]
-            second_high_price = high_values[second_high_idx]
-            
-            price_diff = abs(first_high_price - second_high_price)
-            avg_price = (first_high_price + second_high_price) / 2
-            
-            # Now guaranteed to be scalar comparison
-            if price_diff / avg_price <= self.price_tolerance:
-                intermediate_lows = lows_idx[
-                    (lows_idx > first_high_idx) & (lows_idx < second_high_idx)
-                ]
-                
-                if len(intermediate_lows) > 0:
-                    low_idx = intermediate_lows[np.argmin(low_values[intermediate_lows])]
-                    low_price = low_values[low_idx]
+            for i in range(len(pivot_lows)):
+                for j in range(i + 1, len(pivot_lows)):
+                    if pair_count >= max_pairs:
+                        break
+                        
+                    idx1, price1 = pivot_lows[i]
+                    idx2, price2 = pivot_lows[j]
                     
-                    if (first_high_price - low_price) / first_high_price > 0.01:
-                        double_tops.append({
-                            'pattern_type': 'Double Top',
-                            'first_peak': int(first_high_idx),
-                            'trough': int(low_idx),
-                            'second_peak': int(second_high_idx),
-                            'signal': 'SELL',
-                            'confirmation_idx': int(second_high_idx),
-                            'price_level': float(avg_price)
-                        })
-        
-        return double_tops
-    
-    def detect_double_bottom(self, data):
-        """Robust double bottom detection using numpy operations"""
-        highs_idx = self.find_local_extrema(data, 'High')
-        lows_idx = self.find_local_extrema(data, 'Low')
-        
-        # Convert to numpy arrays for robust indexing
-        high_values = data['High'].values
-        low_values = data['Low'].values
-        
-        double_bottoms = []
-        
-        for i in range(len(lows_idx) - 1):
-            first_low_idx = lows_idx[i]
-            second_low_idx = lows_idx[i + 1]
-            
-            if second_low_idx - first_low_idx < self.min_separation:
-                continue
-            
-            # Direct numpy array access ensures scalar values
-            first_low_price = low_values[first_low_idx]
-            second_low_price = low_values[second_low_idx]
-            
-            price_diff = abs(first_low_price - second_low_price)
-            avg_price = (first_low_price + second_low_price) / 2
-            
-            # Now guaranteed to be scalar comparison
-            if price_diff / avg_price <= self.price_tolerance:
-                intermediate_highs = highs_idx[
-                    (highs_idx > first_low_idx) & (highs_idx < second_low_idx)
-                ]
-                
-                if len(intermediate_highs) > 0:
-                    high_idx = intermediate_highs[np.argmax(high_values[intermediate_highs])]
-                    high_price = high_values[high_idx]
+                    # Skip pairs that are too close in time
+                    if abs(idx2 - idx1) < 3:
+                        continue
                     
-                    if (high_price - first_low_price) / first_low_price > 0.01:
-                        double_bottoms.append({
-                            'pattern_type': 'Double Bottom',
-                            'first_trough': int(first_low_idx),
-                            'peak': int(high_idx),
-                            'second_trough': int(second_low_idx),
-                            'signal': 'BUY',
-                            'confirmation_idx': int(second_low_idx),
-                            'price_level': float(avg_price)
+                    slope = (price2 - price1) / (idx2 - idx1)
+                    intercept = price1 - slope * idx1
+                    
+                    touches, coverage, touch_points = self.calculate_line_strength(
+                        data, slope, intercept, is_support=True
+                    )
+                    
+                    if touches >= self.min_touches and coverage >= self.min_coverage:
+                        start_datetime = data.index[idx1].strftime(datetime_format)
+                        end_datetime = data.index[idx2].strftime(datetime_format)
+                        
+                        raw_support_lines.append({
+                            'datetime_range': f"{start_datetime} to {end_datetime}",
+                            'start_price': price1,
+                            'end_price': price2,
+                            'touches': touches,
+                            'coverage': coverage,
+                            'slope': slope,
+                            'intercept': intercept,
+                            'start_idx': idx1,
+                            'end_idx': idx2,
+                            'touch_points': touch_points
                         })
+                    
+                    pair_count += 1
+                
+                if pair_count >= max_pairs:
+                    break
         
-        return double_bottoms
+        # Find resistance lines with strategic pair selection
+        if len(pivot_highs) >= 2:
+            max_pairs = min(50, len(pivot_highs) * (len(pivot_highs) - 1) // 2)
+            pair_count = 0
+            
+            for i in range(len(pivot_highs)):
+                for j in range(i + 1, len(pivot_highs)):
+                    if pair_count >= max_pairs:
+                        break
+                        
+                    idx1, price1 = pivot_highs[i]
+                    idx2, price2 = pivot_highs[j]
+                    
+                    # Skip pairs that are too close in time
+                    if abs(idx2 - idx1) < 3:
+                        continue
+                    
+                    slope = (price2 - price1) / (idx2 - idx1)
+                    intercept = price1 - slope * idx1
+                    
+                    touches, coverage, touch_points = self.calculate_line_strength(
+                        data, slope, intercept, is_support=False
+                    )
+                    
+                    if touches >= self.min_touches and coverage >= self.min_coverage:
+                        start_datetime = data.index[idx1].strftime(datetime_format)
+                        end_datetime = data.index[idx2].strftime(datetime_format)
+                        
+                        raw_resistance_lines.append({
+                            'datetime_range': f"{start_datetime} to {end_datetime}",
+                            'start_price': price1,
+                            'end_price': price2,
+                            'touches': touches,
+                            'coverage': coverage,
+                            'slope': slope,
+                            'intercept': intercept,
+                            'start_idx': idx1,
+                            'end_idx': idx2,
+                            'touch_points': touch_points
+                        })
+                    
+                    pair_count += 1
+                
+                if pair_count >= max_pairs:
+                    break
+        
+        # Apply professional filtering
+        # Step 1: Consolidate overlapping lines
+        consolidated_support = self.consolidate_overlapping_lines(raw_support_lines)
+        consolidated_resistance = self.consolidate_overlapping_lines(raw_resistance_lines)
+        
+        print(f"🔧 Consolidated {len(raw_support_lines)} → {len(consolidated_support)} support lines")
+        print(f"🔧 Consolidated {len(raw_resistance_lines)} → {len(consolidated_resistance)} resistance lines")
+        
+        # Step 2: Select best non-overlapping lines
+        final_support = self.select_best_lines(consolidated_support, current_price)
+        final_resistance = self.select_best_lines(consolidated_resistance, current_price)
+        
+        return final_support, final_resistance
+
+def load_data_utc(symbol, interval="1d", lookback_days=365):
+    """Load yfinance data and convert to UTC"""
+    end = datetime.today()
+    start = end - timedelta(days=lookback_days)
+    data = yf.download(symbol, start=start, end=end, interval=interval, progress=False)
     
-    def detect_patterns(self, data):
-        """Detect both patterns"""
-        double_tops = self.detect_double_top(data)
-        double_bottoms = self.detect_double_bottom(data)
-        return double_tops + double_bottoms
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = data.columns.droplevel(1)
+    
+    # Clean column names
+    data.columns = [col.lower().replace(' ', '_') for col in data.columns]
+    data.columns = [col.title() for col in data.columns]  # Standardize to Title case
+    
+    # Handle timezone conversion
+    if data.index.tz is None:
+        # Default to US Eastern for most symbols
+        data.index = data.index.tz_localize('America/New_York')
+    
+    # Convert to UTC
+    data.index = data.index.tz_convert('UTC')
+    
+    # Clean data
+    ohlc_cols = ['Open', 'High', 'Low', 'Close']
+    for col in ohlc_cols:
+        if col in data.columns:
+            data[col] = pd.to_numeric(data[col], errors='coerce')
+    
+    data = data.dropna(subset=ohlc_cols)
+    data = data.sort_index()
+    
+    return data
+
+def print_professional_results(symbol, support_lines, resistance_lines, interval):
+    """Print clean, professional results"""
+    interval_name = {
+        '1m': '1-Minute', '5m': '5-Minute', '15m': '15-Minute',
+        '30m': '30-Minute', '60m': '1-Hour', '1h': '1-Hour', '1d': 'Daily'
+    }.get(interval, interval)
+    
+    print(f"📊 {symbol} TOP PATTERN RANGES ({interval_name}) - UTC")
+    print("=" * 55)
+    
+    print(f"\n{len(support_lines)} SUPPORT LINES:")
+    for i, line in enumerate(support_lines, 1):
+        strength = line['touches'] * line['coverage']
+        print(f"  {i}. {line['datetime_range']} (${line['start_price']:.2f} - ${line['end_price']:.2f}) [coverage: {line['coverage']:.1f}]")
+
+    
+    print(f"\n {len(resistance_lines)} RESISTANCE LINES:")
+    for i, line in enumerate(resistance_lines, 1):
+        strength = line['touches'] * line['coverage']
+        print(f"  {i}. {line['datetime_range']} (${line['start_price']:.2f} - ${line['end_price']:.2f}) [coverage: {line['coverage']:.1f}]")
 
 
-def main():
-    """Main execution function with error handling"""
-    print("NQ Futures Double Top/Bottom Pattern Detection")
-    print("=" * 50)
-    
-    # Use the robust detector
-    detector = RobustDoublePatternDetector(
-        price_tolerance=0.008,
-        min_separation=10,
-        lookback_window=5
-    )
-    
-    # Get NQ data
-    print("Fetching NQ futures data...")
-    data = get_nq_data(days=60)
-    print(f"Data loaded: {len(data)} bars from {data.index[0]} to {data.index[-1]}")
-    
-    # Detect patterns with error handling
-    print("\nDetecting double top/bottom patterns...")
-    try:
-        patterns = detector.detect_patterns(data)
-        print(f"Successfully detected {len(patterns)} patterns")
-    except Exception as e:
-        print(f"Error in pattern detection: {e}")
-        return None, [], None
-    
-    # Display results
-    if patterns:
-        print(f"\nFound {len(patterns)} pattern(s):")
-        for i, pattern in enumerate(patterns, 1):
-            print(f"\n{i}. {pattern['pattern_type']} - {pattern['signal']}")
-            print(f"   Confirmation: {data.index[pattern['confirmation_idx']]}")
-            print(f"   Price Level: ${pattern['price_level']:.2f}")
-    else:
-        print("\nNo double top/bottom patterns found in the current dataset.")
-    
-    # Create and display chart
-    print("\nGenerating candlestick chart with pattern annotations...")
-    fig = plot_patterns_with_candlesticks(data, patterns)
-    fig.show()
-    fig.write_html("nq_patterns.html")
-    print("Chart saved as 'nq_patterns.html'")
-    
-    return data, patterns, fig
+# Professional Analysis Presets
+ANALYSIS_PRESETS = {
+    'conservative': {
+        'min_touches': 5,
+        'max_break_percentage': 0.01,
+        'return_threshold': 0.025,
+        'min_coverage': 0.80,
+        'max_lines_per_type': 2,
+        'price_tolerance': 0.003
+    },
+    'balanced': {
+        'min_touches': 4,
+        'max_break_percentage': 0.015,
+        'return_threshold': 0.02,
+        'min_coverage': 0.75,
+        'max_lines_per_type': 3,
+        'price_tolerance': 0.005
+    },
+    'aggressive': {
+        'min_touches': 3,
+        'max_break_percentage': 0.02,
+        'return_threshold': 0.015,
+        'min_coverage': 0.65,
+        'max_lines_per_type': 4,
+        'price_tolerance': 0.008
+    }
+}
 
+def run_professional_analysis(symbol, interval="15m", lookback_days=5, preset='balanced'):
+    """Run professional pattern analysis with overlap elimination"""
+    
+    print(f"🎯 PROFESSIONAL ANALYSIS - {preset.upper()} MODE")
+    print(f"🔄 Loading {symbol} data ({interval}, {lookback_days} days)...")
+    
+    # Load data
+    df = load_data_utc(symbol, interval, lookback_days)
+    print(f"✅ Loaded {len(df)} data points from {df.index[0]} to {df.index[-1]}")
+    
+    # Initialize detector with preset
+    params = ANALYSIS_PRESETS[preset]
+    detector = ProfessionalSupportResistanceDetector(**params)
+    
+    # Find patterns
+    support_lines, resistance_lines = detector.find_support_resistance_lines(df, interval)
+    
+    # Print results
+    print_professional_results(symbol, support_lines, resistance_lines, interval)
+    
+    return {
+        'support_lines': support_lines,
+        'resistance_lines': resistance_lines,
+        'data': df,
+        'preset': preset,
+        'total_patterns': len(support_lines) + len(resistance_lines)
+    }
+
+def run_multi_symbol_analysis(symbols, interval="15m", lookback_days=5, preset='balanced'):
+    """Run analysis on multiple symbols"""
+    results = {}
+    
+    print("🎯 MULTI-SYMBOL PROFESSIONAL ANALYSIS")
+    print("=" * 60)
+    
+    for symbol in symbols:
+        print(f"\n📈 Analyzing {symbol}...")
+        try:
+            result = run_professional_analysis(symbol, interval, lookback_days, preset)
+            results[symbol] = result
+            print(f"✅ {symbol}: Found {result['total_patterns']} high-quality patterns")
+        except Exception as e:
+            print(f"❌ {symbol}: Error - {str(e)}")
+    
+    # Summary
+    print(f"\n📋 ANALYSIS SUMMARY ({preset.upper()} MODE)")
+    print("-" * 40)
+    total_symbols = len([r for r in results.values() if r])
+    total_patterns = sum(r['total_patterns'] for r in results.values() if r)
+    
+    print(f"Symbols Analyzed: {total_symbols}/{len(symbols)}")
+    print(f"Total Quality Patterns: {total_patterns}")
+    print(f"Average Patterns per Symbol: {total_patterns/total_symbols:.1f}")
+    
+    return results
+
+# Example usage
 if __name__ == "__main__":
-    data, patterns, chart = main()
+    # Single symbol with different presets
+    print("=== CONSERVATIVE ANALYSIS ===")
+    conservative_result = run_professional_analysis("AAPL", "15m", 3, 'conservative')
+    
