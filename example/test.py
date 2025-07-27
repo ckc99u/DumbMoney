@@ -432,5 +432,5 @@ def run_multi_symbol_analysis(symbols, interval="15m", lookback_days=5, preset='
 if __name__ == "__main__":
     # Single symbol with different presets
     print("=== CONSERVATIVE ANALYSIS ===")
-    conservative_result = run_professional_analysis("AAPL", "15m", 3, 'conservative')
+    conservative_result = run_professional_analysis("AAPL", "15m", 30, 'conservative')
     
