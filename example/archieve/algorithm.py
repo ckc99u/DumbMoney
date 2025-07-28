@@ -537,5 +537,5 @@ if __name__ == '__main__':
         n_pips=12,
         dist_measure=2,
         step_size=1,
-        enable_debug_plot=False
+        enable_debug_plot=True
     )

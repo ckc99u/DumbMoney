@@ -300,7 +300,7 @@ if __name__ == '__main__':
         end='2025-07-20',
         interval='5m',
         window=50,
-        n_pips=6,
+        n_pips=12,
         dist_measure=2,
         step_size=1,
         plot_each=True

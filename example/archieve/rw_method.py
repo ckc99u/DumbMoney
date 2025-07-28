@@ -437,9 +437,9 @@ if __name__ == '__main__':
     
     df, patterns = backtest_rolling_window_analysis(
         symbol='NQ=F',
-        start='2025-06-15',
+        start='2025-7-15',
         end='2025-07-20',
-        interval='15m',
+        interval='5m',
         window=50,
         order=3,  # Rolling window order
         step_size=1,
