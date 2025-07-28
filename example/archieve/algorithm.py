@@ -30,8 +30,6 @@ class TradeResult:
     exit_reason: str = None  # 'STOP_LOSS', 'TAKE_PROFIT_1', 'TAKE_PROFIT_2', 'END_OF_DATA'
     pnl_points: float = 0.0
     pnl_dollars: float = 0.0
-    duration_bars: int = 0
-    is_winner: bool = False
 
 
 def find_pips(data: np.ndarray, n_pips: int, dist_measure: int = 2) -> Tuple[List[int], List[float]]:
