@@ -62,19 +62,18 @@ class QuantitativeTradingSystem:
 
 def main():
     """Example usage - same as original"""
-    # Default configuration  
-    system = QuantitativeTradingSystem()
-    results = system.run_analysis('NQ=F', '2025-06-01', '2025-07-15', '15m')
-    
-    # Custom parameters example
     custom_params = {
         'window': 50,
-        'n_pips': 12, 
+        'n_pips': 9, 
         'step_size': 1,
         'initial_capital': 50000
     }
     
-    custom_system = QuantitativeTradingSystem(custom_params)
+    system = QuantitativeTradingSystem(custom_params)
+    results = system.run_analysis('example/NQ_2024_2025.csv', '2024-01-01', '2025-07-15', '15m') ##symbol='NQ=F',
+    
+    # Custom parameters example
+
 
 if __name__ == '__main__':
     main()

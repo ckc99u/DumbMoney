@@ -165,17 +165,22 @@ def backtest_pips_analysis(
     enable_debug_plot: bool = False,
     initial_capital: float = 100000
 ):
-    """Enhanced backtest function with comprehensive metrics"""
-    from utils.data_utils import fetch_ohlc_from_yf
+    from utils.data_utils import fetch_ohlc_from_yf, load_ohlc_data_from_csv
     from utils.plotting import plot_pips_pattern
     from core.pips_functions import (
         find_pips, merge_near_collinear_pips, is_valid_standard_pattern,
         create_stop_loss_profit, analyze
     )
+    import yfinance as yf
     from models import PIPsPattern
     
     print(f"Fetching {symbol} data from {start} to {end} ({interval})...")
-    df = fetch_ohlc_from_yf(symbol, start, end, interval, log_prices=False)
+    # # test existance
+    # data = yf.download(symbol, period='5d', progress=False)
+    # if not data.empty:
+    #     df = fetch_ohlc_from_yf(symbol, start, end, interval, log_prices=False)
+    # else:
+    df = load_ohlc_data_from_csv(symbol, start, end)
     
     patterns = []
     trades = []
@@ -190,14 +195,14 @@ def backtest_pips_analysis(
         pip_indices, pip_prices = find_pips(window_data, n_pips, dist_measure)
         pip_indices, pip_prices = merge_near_collinear_pips(
             pip_indices, pip_prices, angle_thresh_deg=130)
-        
-        result, signal = is_valid_standard_pattern(pip_indices, pip_prices, window_data) 
-        
-        if not result:
+
+        enable_trade, signal = is_valid_standard_pattern(pip_indices, pip_prices, window_data) 
+        if not enable_trade:
             i += step_size
             continue
-        
         stop_loss, take_profit = create_stop_loss_profit(pip_indices, pip_prices, window_data, signal)
+        
+
         next_iter, trade_result = analyze(df, end_idx, stop_loss, take_profit, signal)
         
         # Calculate trade duration
@@ -205,7 +210,6 @@ def backtest_pips_analysis(
         trade_result.is_winner = trade_result.pnl_dollars > 0
         
         i = next_iter + window - 1
-        
         abs_pip_indices = [start_idx + idx for idx in pip_indices]
         pattern = PIPsPattern(
             start_idx=start_idx,
@@ -221,17 +225,16 @@ def backtest_pips_analysis(
         patterns.append(pattern)
         trades.append(trade_result)
         
-        if enable_debug_plot:
-            plot_pips_pattern(df, pattern, symbol, interval, stop_loss, take_profit)
+        # if enable_debug_plot or trade_result.pnl_dollars < 0:
+        #     print(signal, trade_result.pnl_dollars)
+        #     plot_pips_pattern(df, pattern, symbol, interval, stop_loss, take_profit)
     
     print(f"Total windows processed: {len(patterns)} patterns, total: {total}")
     
-    # Calculate comprehensive metrics
     start_date = pd.to_datetime(start)
     end_date = pd.to_datetime(end)
     metrics = calculate_comprehensive_metrics(trades, start_date, end_date, initial_capital)
     
-    # Print performance report
     print_performance_report(metrics)
     
     return df, patterns, trades, metrics
