@@ -88,6 +88,7 @@ def calculate_comprehensive_metrics(trades: List[TradeResult], start_date: pd.Ti
     
     # Time-based metrics
     total_days = (end_date - start_date).days
+    print(total_days)
     cagr = calculate_cagr(equity_curve, total_days)
     
     # Sharpe ratio
@@ -127,26 +128,26 @@ def print_performance_report(metrics: BacktestMetrics):
     print(" COMPREHENSIVE BACKTEST REPORT")
     print("="*60)
     
-    print(f"\n📊 BASIC STATISTICS:")
+    print(f"\n BASIC STATISTICS:")
     print(f" Total Trades: {metrics.total_trades}")
     print(f" Win Rate: {metrics.win_rate:.2%}")
     print(f" Avg Trade Duration: {metrics.avg_trade_duration:.1f} bars")
     
-    print(f"\n💰 PROFITABILITY:")
+    print(f"\n PROFITABILITY:")
     print(f" Total Return: {metrics.total_return:.2%}")
     print(f" CAGR: {metrics.cagr:.2%}")
     print(f" Profit Factor: {metrics.profit_factor:.2f}")
     print(f" Profit/Loss Ratio: {metrics.profit_loss_ratio:.2f}")
     
-    print(f"\n⚠️ RISK METRICS:")
+    print(f"\n RISK METRICS:")
     print(f" Max Drawdown: {metrics.max_drawdown:.2%}")
     print(f" Sharpe Ratio: {metrics.sharpe_ratio:.2f}")
     
-    print(f"\n🔄 STREAKS:")
+    print(f"\n STREAKS:")
     print(f" Max Consecutive Wins: {metrics.max_consecutive_wins}")
     print(f" Max Consecutive Losses: {metrics.max_consecutive_losses}")
     
-    print(f"\n✅ REQUIREMENTS CHECK:")
+    print(f"\n REQUIREMENTS CHECK:")
     print(f" Max Drawdown ≤ 12%: {'✓ PASS' if abs(metrics.max_drawdown) <= 0.12 else '✗ FAIL'}")
     print(f" CAGR ≥ 18%: {'✓ PASS' if metrics.cagr >= 0.18 else '✗ FAIL'}")
     print(f" Sharpe ≥ 1.0: {'✓ PASS' if metrics.sharpe_ratio >= 1.0 else '✗ FAIL'}")
@@ -163,7 +164,11 @@ def backtest_pips_analysis(
     dist_measure: int = 2,
     step_size: int = 10,
     enable_debug_plot: bool = False,
-    initial_capital: float = 100000
+    initial_capital: float = 100000,
+    point_value: int = 1,
+    max_loss: int = 800,
+    max_lot: int = 2,
+    round_turn: int = 15,
 ):
     from utils.data_utils import fetch_ohlc_from_yf, load_ohlc_data_from_csv
     from utils.plotting import plot_pips_pattern
@@ -171,16 +176,14 @@ def backtest_pips_analysis(
         find_pips, merge_near_collinear_pips, is_valid_standard_pattern,
         create_stop_loss_profit, analyze
     )
-    import yfinance as yf
     from models import PIPsPattern
     
     print(f"Fetching {symbol} data from {start} to {end} ({interval})...")
-    # # test existance
-    # data = yf.download(symbol, period='5d', progress=False)
-    # if not data.empty:
-    #     df = fetch_ohlc_from_yf(symbol, start, end, interval, log_prices=False)
-    # else:
-    df = load_ohlc_data_from_csv(symbol, start, end)
+
+    if len(symbol) < 4 or symbol[-4:] != '.csv':
+        df = fetch_ohlc_from_yf(symbol, start, end, interval, log_prices=False)
+    else:
+        df = load_ohlc_data_from_csv(symbol, start, end)
     
     patterns = []
     trades = []
@@ -197,13 +200,12 @@ def backtest_pips_analysis(
             pip_indices, pip_prices, angle_thresh_deg=130)
 
         enable_trade, signal = is_valid_standard_pattern(pip_indices, pip_prices, window_data) 
+        stop_loss, take_profit, enable_trade, lot  = create_stop_loss_profit(pip_indices, pip_prices, window_data, signal, max_lot, max_loss)
+        
         if not enable_trade:
             i += step_size
             continue
-        stop_loss, take_profit = create_stop_loss_profit(pip_indices, pip_prices, window_data, signal)
-        
-
-        next_iter, trade_result = analyze(df, end_idx, stop_loss, take_profit, signal)
+        next_iter, trade_result = analyze(df, end_idx, stop_loss, take_profit, signal, lot, point_value, round_turn)
         
         # Calculate trade duration
         trade_result.duration_bars = next_iter - end_idx
@@ -225,9 +227,8 @@ def backtest_pips_analysis(
         patterns.append(pattern)
         trades.append(trade_result)
         
-        # if enable_debug_plot or trade_result.pnl_dollars < 0:
-        #     print(signal, trade_result.pnl_dollars)
-        #     plot_pips_pattern(df, pattern, symbol, interval, stop_loss, take_profit)
+        if enable_debug_plot:
+            plot_pips_pattern(df, pattern, symbol, interval, stop_loss, take_profit)
     
     print(f"Total windows processed: {len(patterns)} patterns, total: {total}")
     

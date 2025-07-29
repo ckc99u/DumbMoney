@@ -105,6 +105,7 @@ def is_valid_standard_pattern(py, px, window_data) -> Tuple[bool, str]:
     slope_1_5 = (pt5 - pt1) / (y5 - y1)
     angle_radians_1_5 = math.atan(slope_1_5)
 
+
     angle2 = calculate_angle_at_middle_point(y1, pt1, y2, pt2, y3, pt3)
     angle4 = calculate_angle_at_middle_point(y3, pt3, y4, pt4, y5, pt5)
     angle5 = calculate_angle_at_middle_point(y4, pt4, y5, pt5, y6, pt6)
@@ -112,7 +113,7 @@ def is_valid_standard_pattern(py, px, window_data) -> Tuple[bool, str]:
     angle3 = calculate_angle_at_middle_point(y1, pt1, y3, pt3, y5, pt5)
 
     if(abs(math.degrees(angle_radians_1_5)) < 20 and max(angle2, angle4, angle5) < 90 and angle3 < 100):
-        if (pt3 > max(pt1, pt5) and pt2 < min(pt3, pt1) and pt4 < min(pt5, pt3)):# Bear
+        if (pt3 > max(pt1, pt5) and pt2 < min(pt3, pt1) and pt4 < min(pt5, pt3)): #Bear
             return True, "Sell"
         if (pt3 < min(pt1, pt5) and pt2 > max(pt1, pt3) and pt4 > max(pt5, pt3)): #Bull
             return True, "Buy"
@@ -135,7 +136,8 @@ def merge_near_collinear_pips(px: List[int], py: List[float], angle_thresh_deg=3
     
     return px, py
 
-def create_stop_loss_profit(py, px, window_data, action):
+def create_stop_loss_profit(py, px, window_data, action, max_lot, max_loss):
+    
     rear = len(px) - 1
     pt1 = px[rear]
     pt2 = px[rear - 1]
@@ -152,7 +154,8 @@ def create_stop_loss_profit(py, px, window_data, action):
     y6 = py[rear - 5]
     
     take_profit_pos = []
-
+    
+    can_trade = True
     points4_6 = window_data[y6 + 1 : y4]
     points1_2 = window_data[y2 : y1]
 
@@ -161,23 +164,30 @@ def create_stop_loss_profit(py, px, window_data, action):
         take_profit_pos.append(max(pt2, pt4)) # first profit line
         diff = abs(take_profit_pos[0] - stop_loss)# adam theory
         take_profit_pos.append(take_profit_pos[0] + diff)
-    else:
+        can_trade = stop_loss > pt3
+    elif action == 'Sell':
         stop_loss = max(points4_6['high'].values.max(), points1_2['high'].values.max())
         take_profit_pos.append(min(pt2, pt4))
         diff = abs(take_profit_pos[0] - stop_loss)# adam theory
         take_profit_pos.append(take_profit_pos[0] - diff)
+        can_trade = stop_loss < pt3
+    else:
+        can_trade = False
+        stop_loss = 0.0
+    
+    if stop_loss * max_lot > max_loss:
+        max_lot = 1
+    return stop_loss, take_profit_pos, can_trade, max_lot
 
-    return stop_loss, take_profit_pos
-
-def assign_trade_result(price, diff_points, exit_reason, point_value, trade_result):
+def assign_trade_result(price, diff_points, exit_reason, point_value, trade_result, commission_fee):
     trade_result.exit_price = price
     trade_result.exit_reason = exit_reason
     trade_result.pnl_points += diff_points
     trade_result.pnl_dollars += (diff_points * point_value)
+    trade_result.pnl_dollars -= commission_fee
     return trade_result
 
-def analyze(data_frame, start_idx, stop_loss, take_profit_pos, action, initial_size = 1):
-    POINT_VALUE = 20.0  # $20 per point move from Chicago Mercantile Exchange (CME) for NQ=F
+def analyze(data_frame, start_idx, stop_loss, take_profit_pos, action, initial_size, point_value, round_turn):
     
     # Initialize trade result
     entry_time = data_frame.index[start_idx]
@@ -185,11 +195,12 @@ def analyze(data_frame, start_idx, stop_loss, take_profit_pos, action, initial_s
     trade_result = TradeResult(
         entry_time=entry_time,
         entry_price=entry_price,
-        action=action
+        action=action,
+        pnl_dollars = -round_turn
     )
-    if (abs(stop_loss - entry_price) * POINT_VALUE > 800): 
+    if (abs(stop_loss - entry_price) * point_value > 800): 
         return start_idx + 1, trade_result
-            
+    
     current_size = 1
     # Track from next bar onwards
     for i in range(start_idx + 1, len(data_frame)):
@@ -199,16 +210,20 @@ def analyze(data_frame, start_idx, stop_loss, take_profit_pos, action, initial_s
         if action == 'Buy':
             if current_bar['low'] <= stop_loss:
                 if trade_result.exit_reason == None:
-                    assign_trade_result(stop_loss, stop_loss - entry_price, 'STOP_LOSS', POINT_VALUE, trade_result)
+                    assign_trade_result(stop_loss, (stop_loss - entry_price) * (initial_size * 0.5), 'STOP_LOSS', point_value, trade_result, round_turn)
                 else:
                     reason = 'TAKE_PROFIT + STOP_LOSS'
-                    assign_trade_result(stop_loss, (stop_loss - entry_price) * 0.5, reason, POINT_VALUE, trade_result)
+                    assign_trade_result(stop_loss, (stop_loss - entry_price)* (initial_size * 0.5), reason, point_value, trade_result, round_turn)
                 return i, trade_result
 
             
             if current_bar['high'] >= take_profit_pos[0] or current_bar['high'] >= take_profit_pos[1]:
                 if (current_bar['high'] >= take_profit_pos[1]):
-                    assign_trade_result(take_profit_pos[1], (take_profit_pos[1] - entry_price) * 0.5, 'TAKE_PROFIT_2', POINT_VALUE, trade_result)
+                    if initial_size > 1:
+                        current_size = int(initial_size * 0.5)
+                    assign_trade_result(take_profit_pos[1], (take_profit_pos[1] - entry_price) * current_size, 'TAKE_PROFIT_2', point_value, trade_result, round_turn)
+                    if (current_size >= initial_size):
+                        return i, trade_result
                 stop_loss = max(current_bar['low'], stop_loss)  # adjust stop loss
 
             if (trade_result.exit_reason != None):
@@ -219,15 +234,20 @@ def analyze(data_frame, start_idx, stop_loss, take_profit_pos, action, initial_s
             if current_bar['high'] >= stop_loss:
                 if trade_result.exit_reason == None:
                     reason = 'STOP_LOSS'
-                    assign_trade_result(stop_loss, (entry_price - stop_loss), reason, POINT_VALUE, trade_result)
+                    assign_trade_result(stop_loss, (entry_price - stop_loss) * initial_size, reason, point_value, trade_result, round_turn)
                 else:
                     reason = 'TAKE_PROFIT_1 + STOP_LOSS'
-                    assign_trade_result(stop_loss, (entry_price - stop_loss) * 0.5, reason, POINT_VALUE, trade_result)
+                    assign_trade_result(stop_loss, (entry_price - stop_loss) * (initial_size * 0.5), reason, point_value, trade_result, round_turn)
                 return i, trade_result
             
             if current_bar['low'] <= take_profit_pos[0] or current_bar['low'] <= take_profit_pos[1]:
                 if (current_bar['low'] <= take_profit_pos[1]):
-                    assign_trade_result(take_profit_pos[1], (entry_price - take_profit_pos[1]) * 0.5, 'TAKE_PROFIT_2', POINT_VALUE, trade_result)
+                    if initial_size > 1:
+                        current_size = int(initial_size * 0.5)
+                    assign_trade_result(take_profit_pos[1], (entry_price - take_profit_pos[1]) * current_size, 'TAKE_PROFIT_2', point_value, trade_result, round_turn)
+                    if (current_size >= initial_size):
+                        return i, trade_result
+                    
                 stop_loss = min(current_bar['high'], stop_loss)
 
             if (trade_result.exit_reason != None):
@@ -246,6 +266,6 @@ def analyze(data_frame, start_idx, stop_loss, take_profit_pos, action, initial_s
     else:
         trade_result.pnl_points = entry_price - final_price
     
-    trade_result.pnl_dollars = trade_result.pnl_points * POINT_VALUE
+    trade_result.pnl_dollars = trade_result.pnl_points * point_value
     
     return len(data_frame), trade_result

@@ -35,7 +35,11 @@ class QuantitativeTradingSystem:
                 dist_measure=self.config.dist_measure,
                 step_size=self.config.step_size,
                 enable_debug_plot=self.config.enable_debug_plot,
-                initial_capital=self.config.initial_capital
+                initial_capital=self.config.initial_capital,
+                point_value = self.config.point_value,
+                max_loss = self.config.max_loss,
+                max_lot = self.config.max_lot,
+                round_turn = self.config.round_turn,
             )
             
             return {
@@ -63,17 +67,19 @@ class QuantitativeTradingSystem:
 def main():
     """Example usage - same as original"""
     custom_params = {
-        'window': 50,
+        'window': 60,
         'n_pips': 9, 
         'step_size': 1,
-        'initial_capital': 50000
+        'initial_capital': 50000,
+        'point_value': 20,
+        'max_loss':  800,
+        'max_lot': 2,
+        'round_turn': 15
     }
     
     system = QuantitativeTradingSystem(custom_params)
-    results = system.run_analysis('example/NQ_2024_2025.csv', '2024-01-01', '2025-07-15', '15m') ##symbol='NQ=F',
+    results = system.run_analysis('example/NQ_2024_2025.csv', '2024-01-01', '2025-07-21', '15m') ##symbol='NQ=F',example/NQ_2024_2025.csv
     
-    # Custom parameters example
-
 
 if __name__ == '__main__':
     main()

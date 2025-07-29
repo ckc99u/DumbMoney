@@ -11,6 +11,10 @@ class TradingConfig:
     step_size: int = 1
     enable_debug_plot: bool = False
     initial_capital: float = 50000
+    point_value: int = 1
+    max_loss: int = 800
+    max_lot: int = 2
+    round_turn: int = 15
     
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> 'TradingConfig':
