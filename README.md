@@ -10,11 +10,10 @@ venv\Scripts\activate         # Windows
 ```
 ## Install dependencies
 ```
-pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
 ## Usage
 ```
-python examples/example.py
+python main.py
 ```
